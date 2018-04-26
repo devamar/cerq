@@ -1,0 +1,92 @@
+<script>
+  async function createWebAssembly(path, importObject) {
+    const bytes = await window.fetch(path).then(x => x.arrayBuffer());
+    return WebAssembly.instantiate(bytes, importObject);
+  }
+
+  const memory = new WebAssembly.Memory({
+    initial: 256,
+    maximum: 256
+  });
+
+  const env = {
+    'abortStackOverflow': _ => {
+      throw new Error('overflow');
+    },
+    'table': new WebAssembly.Table({
+      initial: 0,
+      maximum: 0,
+      element: 'anyfunc'
+    }),
+    'tableBase': 0,
+    'memory': memory,
+    'memoryBase': 1024,
+    'STACKTOP': 0,
+    'STACK_MAX': memory.buffer.byteLength,
+  };
+  const importObject = {
+    env
+  };
+
+  createWebAssembly('math.wasm', importObject).then(wa => {
+    const exports = wa.instance.exports;
+    console.info('got exports', exports);
+
+    var benchmark_add_c = exports._benchmark_add;
+    var benchmark_mult_c = exports._benchmark_mult;
+
+    class Interval {
+      constructor(a, b) {
+        this.a = a;
+        this.b = b;
+      }
+      add(other) {
+        this.a += other.a;
+        this.b += other.b;
+      }
+      mult(other) {
+        this.a = Math.min(this.a*this.b, this.a*other.b, this.b*other.a, this.b*other.b);
+        this.b = Math.max(this.a*this.b, this.a*other.b, this.b*other.a, this.b*other.b);
+      }
+    }
+
+    function benchmark_add_js(N) {
+      var a = new Interval(0, 0);
+      var b = new Interval(4, 7);
+
+      for (var i = 0; i < N; i++) {
+        a.add(b);
+      }
+    }
+
+    function benchmark_mult_js(N) {
+      var a = new Interval(0, 0);
+      var b = new Interval(4, 7);
+
+      for (var i = 0; i < N; i++) {
+        a.mult(b);
+      }
+    }
+
+    var start = new Date().getTime();
+    benchmark_add_js(5000000000);
+    var end = new Date().getTime();
+    console.log('JS Addition Execution time: ' + (end - start) + 'ms');
+    console.log('-----------------------');
+    start = new Date().getTime();
+    benchmark_mult_js(5000000000);
+    end = new Date().getTime();
+    console.log('JS Multiplication Execution time: ' + (end - start) + 'ms');
+    console.log('-----------------------');
+    start = new Date().getTime();
+    benchmark_add_c(5000000000);
+    end = new Date().getTime();
+    console.log('C Addition Execution time: ' + (end - start) + 'ms');
+    console.log('-----------------------');
+    start = new Date().getTime();
+    benchmark_mult_c(5000000000);
+    end = new Date().getTime();
+    console.log('C Multiplication Execution time: ' + (end - start) + 'ms');
+  }).catch(err => console.warn('err loading wasm', err));
+</script>
+</canvas>
